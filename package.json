@@ -1,0 +1,20 @@
+{
+  "name": "web-search-crawler",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Crawler that downloads 100+ HTML pages into text files and generates index.txt",
+  "scripts": {
+    "crawl": "tsx src/crawl.ts",
+    "crawl:all": "tsx src/crawl.ts --limit all",
+    "pack": "tsx src/pack.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1"
+  }
+}
