@@ -7,6 +7,7 @@
   "scripts": {
     "crawl": "tsx src/crawl.ts",
     "crawl:all": "tsx src/crawl.ts --limit all",
+    "tokens": "tsx src/tokens.ts",
     "pack": "tsx src/pack.ts"
   },
   "devDependencies": {
@@ -15,6 +16,9 @@
     "typescript": "^5.7.3"
   },
   "dependencies": {
-    "archiver": "^7.0.1"
+    "archiver": "^7.0.1",
+    "html-entities": "^2.6.0",
+    "snowball-stemmers": "^0.6.0",
+    "stopword": "^3.1.5"
   }
 }
