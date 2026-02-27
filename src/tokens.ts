@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { decode } from "html-entities";
-import snowball from "snowball-stemmers";
 import stopword from "stopword";
 
 type CliOptions = {
@@ -106,24 +106,86 @@ function isCleanToken(token: string): boolean {
   return hasCyr || hasLat;
 }
 
-function lemmatizeToken(
-  token: string,
-  ruStemmer: { stem: (word: string) => string },
-  enStemmer: { stem: (word: string) => string }
-): string {
-  if (isLikelyRussian(token)) return ruStemmer.stem(token);
-  return enStemmer.stem(token);
+async function lemmatizeRussianTokens(tokens: string[]): Promise<Map<string, string>> {
+  if (tokens.length === 0) return new Map();
+
+  return new Promise<Map<string, string>>((resolve, reject) => {
+    const scriptPath = path.join(process.cwd(), "src", "lemmatize_ru.py");
+    const child = spawn("python3", [scriptPath], {
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+
+    child.on("error", (err) => {
+      reject(err);
+    });
+
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(
+          new Error(
+            `Ошибка лемматизации (python exit ${String(code)}): ${stderr.trim()}`
+          )
+        );
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(stdout) as Record<string, string>;
+        resolve(new Map(Object.entries(parsed)));
+      } catch (err) {
+        reject(
+          err instanceof Error
+            ? err
+            : new Error(`Некорректный JSON от лемматизатора: ${String(err)}`)
+        );
+      }
+    });
+
+    child.stdin.write(JSON.stringify(tokens));
+    child.stdin.end();
+  });
+}
+
+function buildLemmaLines(
+  tokens: string[],
+  lemmaByToken: Map<string, string>,
+  collator: Intl.Collator
+): string[] {
+  const lemmaToTokens = new Map<string, Set<string>>();
+  for (const token of tokens) {
+    const lemma = lemmaByToken.get(token) ?? token;
+    if (!lemma) continue;
+
+    if (!lemmaToTokens.has(lemma)) {
+      lemmaToTokens.set(lemma, new Set<string>());
+    }
+    lemmaToTokens.get(lemma)!.add(token);
+  }
+
+  return Array.from(lemmaToTokens.entries())
+    .sort((a, b) => collator.compare(a[0], b[0]))
+    .map(([lemma, groupedTokens]) => {
+      const sortedTokens = Array.from(groupedTokens).sort(collator.compare);
+      return `${lemma} ${sortedTokens.join(" ")}`;
+    });
 }
 
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   const stopwords = buildStopwordSet();
-
-  const { newStemmer } = snowball as {
-    newStemmer: (algo: string) => { stem: (word: string) => string };
-  };
-  const ruStemmer = newStemmer("russian");
-  const enStemmer = newStemmer("english");
+  const collator = new Intl.Collator("ru-RU");
 
   const entries = await readdir(opts.inDir, { withFileTypes: true });
   const files = entries
@@ -136,6 +198,7 @@ async function main() {
   }
 
   const tokenSet = new Set<string>();
+  const tokensByFile = new Map<string, string[]>();
   await mkdir(opts.perFileTokensDir, { recursive: true });
   await mkdir(opts.perFileLemmasDir, { recursive: true });
 
@@ -155,54 +218,33 @@ async function main() {
       fileTokenSet.add(token);
     }
 
-    const collator = new Intl.Collator("ru-RU");
     const fileTokens = Array.from(fileTokenSet).sort(collator.compare);
-    const fileLemmaToTokens = new Map<string, Set<string>>();
-
-    for (const token of fileTokens) {
-      const lemma = lemmatizeToken(token, ruStemmer, enStemmer);
-      if (!lemma || lemma.length < opts.minLen) continue;
-      if (!fileLemmaToTokens.has(lemma)) {
-        fileLemmaToTokens.set(lemma, new Set<string>());
-      }
-      fileLemmaToTokens.get(lemma)!.add(token);
-    }
-
-    const fileLemmaLines = Array.from(fileLemmaToTokens.entries())
-      .sort((a, b) => collator.compare(a[0], b[0]))
-      .map(([lemma, groupedTokens]) => {
-        const sortedTokens = Array.from(groupedTokens).sort(collator.compare);
-        return `${lemma} ${sortedTokens.join(" ")}`;
-      });
-
+    tokensByFile.set(file, fileTokens);
     const stem = path.parse(file).name;
     const fileTokensOut = path.join(opts.perFileTokensDir, `${stem}.tokens.txt`);
-    const fileLemmasOut = path.join(opts.perFileLemmasDir, `${stem}.lemmas.txt`);
-
     await writeFile(fileTokensOut, fileTokens.join("\n") + "\n", "utf8");
+  }
+
+  const tokens = Array.from(tokenSet).sort(collator.compare);
+  const ruTokens = tokens.filter(isLikelyRussian);
+  const ruLemmaMap = await lemmatizeRussianTokens(ruTokens);
+  const lemmaByToken = new Map<string, string>();
+
+  for (const token of tokens) {
+    if (isLikelyRussian(token)) {
+      lemmaByToken.set(token, ruLemmaMap.get(token) ?? token);
+      continue;
+    }
+    lemmaByToken.set(token, token);
+  }
+
+  const lemmaLines = buildLemmaLines(tokens, lemmaByToken, collator);
+  for (const [file, fileTokens] of tokensByFile.entries()) {
+    const stem = path.parse(file).name;
+    const fileLemmasOut = path.join(opts.perFileLemmasDir, `${stem}.lemmas.txt`);
+    const fileLemmaLines = buildLemmaLines(fileTokens, lemmaByToken, collator);
     await writeFile(fileLemmasOut, fileLemmaLines.join("\n") + "\n", "utf8");
   }
-
-  const collator = new Intl.Collator("ru-RU");
-  const tokens = Array.from(tokenSet).sort(collator.compare);
-
-  const lemmaToTokens = new Map<string, Set<string>>();
-  for (const token of tokens) {
-    const lemma = lemmatizeToken(token, ruStemmer, enStemmer);
-    if (!lemma || lemma.length < opts.minLen) continue;
-
-    if (!lemmaToTokens.has(lemma)) {
-      lemmaToTokens.set(lemma, new Set<string>());
-    }
-    lemmaToTokens.get(lemma)!.add(token);
-  }
-
-  const lemmaLines = Array.from(lemmaToTokens.entries())
-    .sort((a, b) => collator.compare(a[0], b[0]))
-    .map(([lemma, groupedTokens]) => {
-      const sortedTokens = Array.from(groupedTokens).sort(collator.compare);
-      return `${lemma} ${sortedTokens.join(" ")}`;
-    });
 
   await writeFile(opts.tokensOut, tokens.join("\n") + "\n", "utf8");
   await writeFile(opts.lemmasOut, lemmaLines.join("\n") + "\n", "utf8");
