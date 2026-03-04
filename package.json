@@ -8,6 +8,8 @@
     "crawl": "tsx src/crawl.ts",
     "crawl:all": "tsx src/crawl.ts --limit all",
     "tokens": "tsx src/tokens.ts",
+    "index": "tsx src/build_index.ts",
+    "search": "tsx src/search.ts",
     "pack": "tsx src/pack.ts"
   },
   "devDependencies": {

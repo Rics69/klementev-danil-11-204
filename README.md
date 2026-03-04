@@ -95,6 +95,63 @@ npm run tokens
 npm run tokens -- --inDir dump --tokensOut tokens.txt --lemmasOut lemmas.txt --perFileTokensDir tokens_by_doc --perFileLemmasDir lemmas_by_doc
 ```
 
+## Инвертированный индекс
+
+Генерация файла с инвертированным индексом:
+
+```bash
+npm run index
+```
+
+По умолчанию создается файл `inverted_index.txt` в формате:
+
+- `<лемма><TAB><doc1> <doc2> ... <docN>`
+
+Опции:
+
+- `--lemmasDir lemmas_by_doc` (папка с файлами `*.lemmas.txt`)
+- `--out inverted_index.txt` (имя выходного файла)
+
+Пример:
+
+```bash
+npm run index -- --out inverted_index.txt
+```
+
+## Булев поиск
+
+Скрипт `search` строит инвертированный индекс по папке `lemmas_by_doc/` (формат: `лемма -> список документов`) и выполняет булев поиск.
+
+Поддерживаются операторы:
+
+- `AND`
+- `OR`
+- `NOT`
+- скобки `(` `)` для сложных выражений
+
+Приоритет операторов:
+
+1. `NOT`
+2. `AND`
+3. `OR`
+
+Запуск с запросом в аргументе:
+
+```bash
+npm run search -- --query "(Клеопатра AND Цезарь) OR (Антоний AND Цицерон) OR Помпей"
+```
+
+Интерактивный запуск (запрос вводится строкой в консоль):
+
+```bash
+npm run search
+```
+
+Опции:
+
+- `--lemmasDir lemmas_by_doc` (папка с файлами `*.lemmas.txt`)
+- `--query "..."` (булев запрос)
+
 ## Сборка архива для отправки
 
 ```bash
