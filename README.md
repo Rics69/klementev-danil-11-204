@@ -152,6 +152,44 @@ npm run search
 - `--lemmasDir lemmas_by_doc` (папка с файлами `*.lemmas.txt`)
 - `--query "..."` (булев запрос)
 
+## TF-IDF по документам
+
+Скрипт считает для каждого документа:
+
+- `tf` и `idf` для каждого термина из `tokens.txt`, затем `tf-idf`;
+- `tf` и `idf` для каждой леммы из `lemmas.txt`, затем `tf-idf`.
+
+Формулы:
+
+- `tf(term, doc) = count(term, doc) / total_terms(doc)`
+- `idf(term) = ln(N / df(term))`
+- `tf-idf(term, doc) = tf(term, doc) * idf(term)`
+- для леммы `tf(lemma, doc)` считается как сумма вхождений всех терминов этой леммы, деленная на `total_terms(doc)`.
+
+Запуск:
+
+```bash
+npm run tfidf
+```
+
+Результат:
+
+- папка `tfidf_terms_by_doc/`:
+  - `NNNN.terms.tfidf.txt` для каждого документа;
+  - формат строк: `<термин><пробел><idf><пробел><tf-idf>\n`
+- папка `tfidf_lemmas_by_doc/`:
+  - `NNNN.lemmas.tfidf.txt` для каждого документа;
+  - формат строк: `<лемма><пробел><idf><пробел><tf-idf>\n`
+
+Опции:
+
+- `--inDir dump`
+- `--tokensFile tokens.txt`
+- `--lemmasFile lemmas.txt`
+- `--termsOutDir tfidf_terms_by_doc`
+- `--lemmasOutDir tfidf_lemmas_by_doc`
+- `--minLen 2`
+
 ## Сборка архива для отправки
 
 ```bash
