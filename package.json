@@ -11,6 +11,8 @@
     "index": "tsx src/build_index.ts",
     "tfidf": "tsx src/tfidf.ts",
     "search": "tsx src/search.ts",
+    "vector-search": "tsx src/vector_search.ts",
+    "web": "tsx src/web.ts",
     "pack": "tsx src/pack.ts"
   },
   "devDependencies": {
